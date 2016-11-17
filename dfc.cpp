@@ -31,48 +31,28 @@
 /* You will have to modify the program below */
 using namespace std;
 
-map<string,string> servers;
-map<string,string>::iterator it; //iterator to loop through the map
+class IpAndPorts
+{
+public:
+string ip;
+string port;
+IpAndPorts(string ip_i,string port_i){
+ip = ip_i;
+port = port_i;
+}
+IpAndPorts(){}
+};
+
+map<string,IpAndPorts> servers;
+map<string,IpAndPorts>::iterator it; //iterator to loop through the map
 
 string userId;
 string password;
 
 // To split using a delimiting character (used to load conf)
-void split(const string &s, char delim, vector<string> &elems) {
-    stringstream ss;
-    ss.str(s);
-    string item;
-    while (getline(ss, item, delim)) {
-        elems.push_back(item);
-    }
-}
-vector<string> splitString(const string &s, char delim) 
+void split(const string &s, char delim, vector<string> &elems) {vector<string> splitString(const string &s, char delim) 
+{string openConfFile(string fileName)
 {
-    vector<string> elems;
-    split(s, delim, elems);
-    return elems;
-}
-string openConfFile(string fileName)
-{
-	int indexConf = open("dfc.conf",O_RDONLY);
-	if(indexConf == -1)
-		return "";
-		
-	else
-	{
-	close(indexConf);
-	ifstream file(fileName.c_str());
-	string str;
-	string file_contents;
-	while (getline(file, str))
-	{
-	  file_contents += str;
-	  file_contents.push_back('\n');
-	} 
-	return file_contents;
-	}	
-}
-
 bool LoadConf()
 {
   string confContent = openConfFile("dfc.conf");
@@ -84,9 +64,12 @@ bool LoadConf()
   lines = splitString(confContent, '\n'); // get the lines.
   for(int i = 0 ; i < 4; i++)
   {
-  		vector<string> serversAndIP;
-  		serversAndIP = splitString(lines[i], ' ');
-  		servers[serversAndIP[1]] = serversAndIP[2];	
+  		vector<string> serversAndIP; 
+  		serversAndIP = splitString(lines[i], ' '); //lines Server DFS1 127.0.0.1:10001 becomes space separated.
+  		vector<string> ipport;
+		ipport = splitString(serversAndIP[2],':'); // we get 127.0.0.1 and 10001
+  		IpAndPorts* obj = new IpAndPorts(ipport[0],(ipport[1]));
+  		servers[serversAndIP[1]] = *obj; 	
   }
   
   vector<string> username = splitString(lines[4], ' ');
@@ -97,7 +80,7 @@ bool LoadConf()
     
   //to check if loaded userid and passwords correctly
   for ( it = servers.begin(); it != servers.end(); it++ )
-    cout << it->first<< ':'<< it->second<< endl ;
+    cout << it->first<< ':'<< it->second.ip<<" "<<it->second.port<< endl ;
   cout<<userId<<" "<<password<<endl;
 
   
@@ -105,37 +88,10 @@ bool LoadConf()
 }
 void askInputs(char* userInput)
 {
-	char str[80];
-	int i;
-	printf("Enter a command (get [Filename] put [Filename] ls exit): ");
-	fgets(str, 50, stdin);
-
-	/* remove newline, if present */
-	i = strlen(str)-1;
-	if( str[ i ] == '\n') 
-		str[i] = '\0';
-
-
-	strcpy(userInput,"");
-	strcat(userInput,str);
-}
-
 bool startsWith(const char *pre, const char *str)
-{
-    size_t lenpre = strlen(pre),
-           lenstr = strlen(str);
-    return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
-}
-// get sockaddr, IPv4 or IPv6:
+{// get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
 {
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
 int main (int argc, char * argv[])
 {
    if(!LoadConf())
@@ -149,16 +105,17 @@ int main (int argc, char * argv[])
     int rv;
     char s[INET6_ADDRSTRLEN];
 
-    if (argc != 2) {
+    /*if (argc != 2) {
         fprintf(stderr,"usage: client hostname\n");
         exit(1);
-    }
+    }*/
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((rv = getaddrinfo(argv[1], PORT, &hints, &servinfo)) != 0) {
+cout<<servers["DFS1"].ip.c_str();
+    if ((rv = getaddrinfo(/*argv[1]*/servers["DFS1"].ip.c_str(), PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
@@ -215,18 +172,13 @@ int main (int argc, char * argv[])
 
 	struct sockaddr_in remote;              //"Internet socket address structure"
 
-	if (argc < 3)
+	/*if (argc < 3)
 	{
 		printf("USAGE:  <server_ip> <server_port>\n");
 		exit(1);
-	}
+	}*/
 
-	/******************
-	  Here we populate a sockaddr_in struct with
-	  information regarding where we'd like to send our packet 
-	  i.e the Server.
-	 ******************/
-	bzero(&remote,sizeof(remote));               //zero the struct
+	/******************	bzero(&remote,sizeof(remote));               //zero the struct
 	remote.sin_family = AF_INET;                 //address family
 	remote.sin_port = htons(atoi(argv[2]));      //sets port to network byte order
 	remote.sin_addr.s_addr = inet_addr(argv[1]); //sets remote IP address
@@ -234,145 +186,9 @@ int main (int argc, char * argv[])
 	//Causes the system to create a generic socket of type UDP (datagram)
 	if ((sock = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP)) <0)//**** CALL SOCKET() HERE TO CREATE A UDP SOCKET ****) < 0)
 	{
-		printf("unable to create socket");
-	}
-
 	/******************
-	  sendto() sends immediately.  
-	  it will report an error if the message fails to leave the computer
-	  however, with UDP, there is no error if the message is lost in the network once it leaves the computer.
-	 ******************/
-
 	char command[80];
 	while(true)
-	{	
-		askInputs(command);
-		if(strcmp(command,"exit")==0)
-			break;
-		
-		nbytes = sendto(sock,command,sizeof(command),0,(struct sockaddr *)&remote,sizeof(remote));
-
-		// Blocks till bytes are received
-		struct sockaddr_in from_addr;
-		int addr_length = sizeof(struct sockaddr);
-		bzero(buffer,sizeof(buffer));
-
-		unsigned int remote_length = sizeof(remote);         //length of the sockaddr_in structure
-
-		
-				
-
-		nbytes = recvfrom(sock,buffer,MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length); //this returns number of packets for get and the file names for ls and ack for put
-		
-		if(strcmp(command,"ls")==0)
-			{
-			printf("%s\n",buffer);		
-			continue;
-			}
-		else if(!( (startsWith("get ",command)) || (startsWith("put ",command)) ))
-		{
-			
-			printf("%s\n",buffer);		
-			continue;
-		}
-////////////////////////////// understand the command
-		char command1[80];
-		char fileName[80];
-		char word[80];
-		char* split;
-		bool isValid = true;
-		split=strtok(command," ");
-
-		    strcpy(word,split);
-		    split=strtok(NULL," ");
-
-
-		    if((strcmp(word,"get") == 0) || (strcmp(word,"put") == 0))
-			strcpy(command1,word);
-		    else
-			isValid = false;
-			
-		    strcpy(word,split);
-    		    strcpy(fileName,word);
-
-////////////////////////////////
-		if(strcmp(command1,"get")==0)
-		{
-			char* ack = "ack";
-			nbytes = sendto(sock,ack,sizeof(ack),0,(struct sockaddr *)&remote,sizeof(remote));
-
-
-			unsigned long numberOfPackets;
-
-			memcpy( &numberOfPackets, buffer, sizeof( unsigned long ) );
-
-			FILE* file = fopen( "clientFile", "wb" );
-
-			while(numberOfPackets > 0)
-			{		
-				nbytes = recvfrom(sock,buffer,MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length);
-				fwrite( buffer, 1, nbytes, file );
-
-				numberOfPackets = numberOfPackets - 1;
-
-				strcpy(buffer,ack);		
-				nbytes = sendto(sock,buffer,sizeof(ack),0,(struct sockaddr *)&remote,sizeof(remote));			
-			}
-
-			fclose(file);
-		}
-		 if(strcmp(command1,"put")==0)
-		{
-				char file_buffer[MAXBUFSIZE];
-				FILE *fp;
-				fp=fopen(fileName,"r");
-				if(fp==NULL)
-				{
-				printf("file does not exist\n");
-				continue;
-				}
-
-				fseek(fp,0,SEEK_END);
-				size_t file_size=ftell(fp);
-				fseek(fp,0,SEEK_SET);
-				
-				unsigned long numberOfPackets = (unsigned long)file_size/((unsigned long)sizeof(file_buffer))+1;
-				
-				unsigned char numberOfPacketsPacket[sizeof(unsigned long )];
-				memcpy( numberOfPacketsPacket, & numberOfPackets, sizeof( unsigned long ) );
-
-				nbytes = sendto(sock,numberOfPacketsPacket,sizeof(numberOfPacketsPacket),0,(struct sockaddr *)&remote, sizeof(remote));     // send no. of bytes to send
-				nbytes = recvfrom(sock,buffer,MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length);			         //get some ack
-
-				char ack[10];
-				size_t bytesRead = 0;
-				long sizeRead = 0;
-
-				if (fp != NULL)    
-				{
-
-				  while ((bytesRead = fread(file_buffer,1, sizeof(file_buffer) , fp)) > 0)  // read up to sizeof(buffer) bytes
-				  {					
-					sizeRead++;					
-					nbytes = sendto(sock,file_buffer,bytesRead,0,(struct sockaddr *)&remote, sizeof(remote));     // process bytesRead worth of data in buffer
-					
-					struct timeval timeout;//={2,0}; //set timeout for 2 seconds
-					timeout.tv_sec = 100;
-					setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,(struct timeval*)&timeout,sizeof(struct timeval));
-
-
-					nbytes = recvfrom(sock,ack,MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length);
-					while(nbytes<0)
-					//while(strcmp(ack,"ack")!=0)
-					{
-						nbytes = sendto(sock,file_buffer,bytesRead,0,(struct sockaddr *)&remote, sizeof(remote));     // process bytesRead worth of data in buffer
-						nbytes = recvfrom(sock,ack,sizeof(ack), 0, (struct sockaddr *)&remote, &remote_length);
-					}
-				  }
-				}
-		}
-	}
-	close(sock);
+	{		close(sock);
 
 }
-
